@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Phone, Building2, Mail, MessageSquare, Send, CheckCircle, Download, Share2, UsersRound, Camera, RefreshCw, Trash2, Upload, XCircle, UserRound } from 'lucide-react';
+import { User, Phone, Building2, Mail, MessageSquare, Send, CheckCircle, Download, Share2, UsersRound, Camera, RefreshCw, Trash2, Upload, XCircle, UserRound, Calendar, Clock } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api';
 import Webcam from 'react-webcam';
@@ -14,6 +14,7 @@ const VisitorForm = () => {
         company: '',
         email: '',
         appointment_with: '',
+        visit_date: new Date().toISOString().slice(0, 16), // Format: YYYY-MM-DDTHH:mm
         purpose: '',
         photo: null
     });
@@ -58,6 +59,8 @@ const VisitorForm = () => {
     const [visitorId, setVisitorId] = useState(null);
     const [approvalData, setApprovalData] = useState(null);
 
+    const [errorMessage, setErrorMessage] = useState('');
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -66,14 +69,32 @@ const VisitorForm = () => {
             return;
         }
 
+        if (!formData.appointment_with) {
+            alert("Please select an office to visit.");
+            return;
+        }
+
         setStatus('submitting');
+        setErrorMessage('');
         try {
             const res = await api.post('/api/visitors', formData);
             setVisitorId(res.data.id);
             setStatus('success');
         } catch (err) {
-            console.error(err);
+            console.error('SUBMISSION ERROR:', err);
             setStatus('error');
+
+            let detailedError = '';
+            if (!err.response) {
+                // Network error (server down, CORS, etc.)
+                detailedError = `Network Error (Server Unreachable). Check if Backend is running at ${api.defaults.baseURL}`;
+            } else if (err.response.status === 413) {
+                detailedError = "Photo size too large. Please try again.";
+            } else {
+                detailedError = err.response.data?.error || `Error ${err.response.status}: ${err.statusText || 'Submission failed'}`;
+            }
+
+            setErrorMessage(detailedError);
         }
     };
 
@@ -113,8 +134,16 @@ const VisitorForm = () => {
                         <CheckCircle className="w-20 h-20 text-accent" />
                     </div>
                     <h2 className="text-3xl font-bold text-white mb-4">Request Sent!</h2>
-                    <p className="text-slate-400 mb-6">
-                        Thank you for registering. Please wait in the lounge.<br />
+                    <p className="text-slate-400 mb-2">
+                        Thank you for registering. Please wait in the lounge.
+                    </p>
+                    {formData.visit_date && (
+                        <div className="bg-white/5 border border-white/10 p-3 rounded-xl mb-6 flex items-center justify-center gap-2">
+                            <Calendar className="w-4 h-4 text-emerald-500" />
+                            <span className="text-xs text-slate-300 font-bold">Planned Visit: {new Date(formData.visit_date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                    )}
+                    <p className="mb-6">
                         <span className="text-emerald-400 font-medium animate-pulse">Waiting for admin approval...</span>
                     </p>
                     <button
@@ -137,21 +166,27 @@ const VisitorForm = () => {
                                 <div className={`absolute top-0 left-0 w-full h-2 ${approvalData.status === 'approved' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
 
                                 {approvalData.status === 'approved' ? (
-                                    <div className="text-left w-full" id="visitor-pass-card">
+                                    <div className="text-left w-full" id="visitor-pass-card" style={{ backgroundColor: '#020617' }}>
                                         <div className="flex items-center justify-between mb-6 border-b border-white/10 pb-4">
                                             <div>
                                                 <h2 className="text-xl font-bold text-white">Visitor Pass</h2>
-                                                <p className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Approved</p>
+                                                <p className="text-emerald-400 text-xs font-bold uppercase tracking-wider" style={{ color: '#34d399' }}>Approved</p>
                                             </div>
-                                            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                                                <CheckCircle className="w-6 h-6 text-emerald-400" />
+                                            <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(52, 211, 153, 0.2)' }}>
+                                                <CheckCircle className="w-6 h-6 text-emerald-400" style={{ color: '#34d399' }} />
                                             </div>
                                         </div>
 
                                         <div className="bg-white p-4 rounded-2xl mb-6 shadow-xl text-center">
                                             <div className="flex justify-center mb-2">
                                                 <QRCodeSVG
-                                                    value={JSON.stringify({ id: approvalData._id, name: approvalData.name, time: approvalData.appointment_time })}
+                                                    value={JSON.stringify({
+                                                        id: approvalData._id,
+                                                        name: approvalData.name,
+                                                        company: approvalData.company,
+                                                        office: approvalData.appointment_with,
+                                                        time: approvalData.visit_date ? `${new Date(approvalData.visit_date).toLocaleDateString('en-GB')} ${approvalData.appointment_time || ''}` : approvalData.appointment_time
+                                                    })}
                                                     size={160}
                                                 />
                                             </div>
@@ -160,18 +195,33 @@ const VisitorForm = () => {
 
                                         <div className="space-y-4 mb-8">
                                             <div>
-                                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Visitor Name</p>
-                                                <p className="text-lg text-white font-semibold">{approvalData.name}</p>
+                                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1" style={{ color: '#64748b' }}>Visitor Name</p>
+                                                <p className="text-lg text-white font-semibold" style={{ color: '#ffffff' }}>{approvalData.name}</p>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Time</p>
-                                                    <p className="text-emerald-400 font-mono text-xl font-bold">{approvalData.appointment_time}</p>
+                                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1" style={{ color: '#64748b' }}>Time</p>
+                                                    <p className="text-emerald-400 font-mono text-sm font-bold" style={{ color: '#34d399' }}>
+                                                        {approvalData.visit_date ?
+                                                            `${new Date(approvalData.visit_date).toLocaleDateString('en-GB').split('/').join('-')} ${approvalData.appointment_time || '00:00:00'}` :
+                                                            approvalData.appointment_time || 'N/A'
+                                                        }
+                                                    </p>
                                                 </div>
                                                 <div>
-                                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Company</p>
-                                                    <p className="text-slate-300 font-medium truncate">{approvalData.company || '-'}</p>
+                                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1" style={{ color: '#64748b' }}>Company</p>
+                                                    <p className="text-slate-300 font-medium truncate" style={{ color: '#cbd5e1' }}>{approvalData.company || '-'}</p>
                                                 </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1" style={{ color: '#64748b' }}>Office</p>
+                                                    <p className="text-white font-bold truncate text-[10px]" style={{ color: '#ffffff' }}>{approvalData.appointment_with || '-'}</p>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1" style={{ color: '#64748b' }}>Purpose</p>
+                                                <p className="text-slate-300 font-medium line-clamp-2 text-[10px]" style={{ color: '#cbd5e1' }}>{approvalData.purpose || '-'}</p>
                                             </div>
                                         </div>
 
@@ -191,23 +241,17 @@ const VisitorForm = () => {
                                                                 const clonedPass = clonedDoc.getElementById('visitor-pass-card');
 
                                                                 if (originalPass && clonedPass) {
-                                                                    // Get all original elements and cloned elements in the same order
                                                                     const originals = [originalPass, ...originalPass.querySelectorAll('*')];
                                                                     const clones = [clonedPass, ...clonedPass.querySelectorAll('*')];
 
-                                                                    // CSS Fix: Tailwind 4 uses oklch() which crashes html2canvas.
-                                                                    // We capture the browser-resolved RGB colors from the ORIGINAL visible elements
-                                                                    // and bake them into the CLONED elements.
                                                                     originals.forEach((origEl, idx) => {
                                                                         const cloneEl = clones[idx];
                                                                         if (!cloneEl) return;
 
                                                                         const style = window.getComputedStyle(origEl);
-
-                                                                        // Transfer critical visual styles as resolved RGB/Hex values
-                                                                        cloneEl.style.color = style.color;
-                                                                        cloneEl.style.backgroundColor = style.backgroundColor;
-                                                                        cloneEl.style.borderColor = style.borderColor;
+                                                                        cloneEl.style.color = style.color.includes('oklch') ? '#ffffff' : style.color;
+                                                                        cloneEl.style.backgroundColor = style.backgroundColor.includes('oklch') ? 'transparent' : style.backgroundColor;
+                                                                        cloneEl.style.borderColor = style.borderColor.includes('oklch') ? 'transparent' : style.borderColor;
                                                                         cloneEl.style.fontSize = style.fontSize;
                                                                         cloneEl.style.fontWeight = style.fontWeight;
                                                                         cloneEl.style.borderRadius = style.borderRadius;
@@ -219,16 +263,15 @@ const VisitorForm = () => {
                                                                         cloneEl.style.justifyContent = style.justifyContent;
                                                                         cloneEl.style.gap = style.gap;
 
-                                                                        // Strip problematic background images (like gradients with oklch)
-                                                                        if (style.backgroundImage.includes('oklch')) {
+                                                                        if (style.backgroundImage.includes('oklch') || style.background.includes('oklch')) {
                                                                             cloneEl.style.backgroundImage = 'none';
+                                                                            cloneEl.style.background = 'none';
                                                                         }
                                                                     });
 
-                                                                    // CRITICAL: Now that we've "baked" the styles into the clones,
-                                                                    // remove all stylesheets in the cloned document so the parser doesn't crash.
                                                                     const sheets = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
                                                                     sheets.forEach(sheet => sheet.remove());
+                                                                    clonedDoc.body.style.background = '#020617';
                                                                 }
                                                             }
                                                         });
@@ -242,7 +285,7 @@ const VisitorForm = () => {
                                                     }
                                                 }
                                             }}
-                                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 mb-3 shadow-lg shadow-emerald-500/20"
+                                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 mb-3 shadow-lg shadow-emerald-500/20 text-[10px] uppercase"
                                         >
                                             <Download className="w-4 h-4" /> Download Pass
                                         </button>
@@ -394,6 +437,24 @@ const VisitorForm = () => {
                 </div>
 
 
+                {/* Visit Date & Time */}
+                <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5 z-10" />
+                    <input
+                        type="datetime-local"
+                        name="visit_date"
+                        value={formData.visit_date}
+                        onChange={handleChange}
+                        required
+                        className="premium-input w-full p-4 pl-12 rounded-xl text-white appearance-none"
+                        style={{ colorScheme: 'dark' }}
+                    />
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-bold uppercase tracking-widest pointer-events-none">
+                        Visit Date & Time
+                    </div>
+                </div>
+
+
                 <div className="relative">
                     <div className={`premium-card p-4 rounded-xl border ${formData.photo ? 'border-emerald-500/50' : 'border-white/10'} overflow-hidden`}>
                         <div className="flex items-center justify-between mb-3 px-1">
@@ -538,6 +599,19 @@ const VisitorForm = () => {
                         className="premium-input w-full p-4 pl-12 rounded-xl text-white h-32 resize-none"
                     ></textarea>
                 </div>
+
+                <AnimatePresence>
+                    {errorMessage && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-xs font-bold text-center"
+                        >
+                            {errorMessage}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 <button
                     type="submit"

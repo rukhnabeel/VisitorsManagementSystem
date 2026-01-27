@@ -11,6 +11,7 @@ const VisitorSchema = new mongoose.Schema({
     photo: { type: String }, // Base64 encoded image
     status: { type: String, enum: ['pending', 'approved', 'rejected', 'checked-out', 'checked-in'], default: 'pending' },
     appointment_time: { type: String },
+    visit_date: { type: String },
     checkOutTime: { type: Date },
 }, { timestamps: true });
 

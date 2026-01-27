@@ -3,6 +3,7 @@ import api from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X, Clock, User, Mail, Phone, Building2, Search, QrCode, Download, UsersRound, Calendar, MessageSquare, RefreshCw, TrendingUp, UserCheck, UserMinus, ShieldAlert, UserRound, MessageCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
 const AdminDashboard = () => {
     const [visitors, setVisitors] = useState([]);
@@ -88,10 +89,11 @@ const AdminDashboard = () => {
     };
 
     const exportToCSV = () => {
-        const headers = ['Name', 'Email', 'Mobile', 'Company', 'Visiting Office', 'Purpose', 'Status', 'Check-In'];
+        const headers = ['Name', 'Email', 'Mobile', 'Company', 'Visiting Office', 'Purpose', 'Status', 'Requested Visit Date', 'Registration Date'];
         const data = visitors.map(v => [
             v.name, v.email, `"${v.mobile}"`, v.company || '', v.appointment_with || '', `"${v.purpose}"`, v.status,
-            new Date(v.createdAt).toLocaleString()
+            v.visit_date ? `${new Date(v.visit_date).toLocaleDateString('en-GB').split('/').join('-')} ${new Date(v.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'N/A',
+            new Date(v.createdAt).toLocaleString('en-GB').split('/').join('-')
         ]);
         const csvContent = "data:text/csv;charset=utf-8," + [headers, ...data].map(e => e.join(",")).join("\n");
         const encodedUri = encodeURI(csvContent);
@@ -118,13 +120,23 @@ const AdminDashboard = () => {
         setTimeSlots(slots);
     }, []);
 
-    const handleAction = async (id, status) => {
+    const handleAction = async (visitor, status) => {
+        const id = typeof visitor === 'string' ? visitor : visitor._id;
+
         if (status === 'approved') {
             setApprovalId(id);
-            const now = new Date();
-            const remainder = 10 - (now.getMinutes() % 10);
-            now.setMinutes(now.getMinutes() + remainder);
-            setSelectedTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`);
+
+            // If visitor has a requested date, use its time as default
+            const visitorData = typeof visitor === 'object' ? visitor : visitors.find(v => v._id === id);
+            if (visitorData && visitorData.visit_date) {
+                const requestedDate = new Date(visitorData.visit_date);
+                setSelectedTime(`${requestedDate.getHours().toString().padStart(2, '0')}:${requestedDate.getMinutes().toString().padStart(2, '0')}:00`);
+            } else {
+                const now = new Date();
+                const remainder = 10 - (now.getMinutes() % 10);
+                now.setMinutes(now.getMinutes() + remainder);
+                setSelectedTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:00`);
+            }
             return;
         }
         updateVisitorStatus(id, status, '');
@@ -165,7 +177,12 @@ const AdminDashboard = () => {
     };
 
     const sendWhatsAppPass = (visitor) => {
-        const message = `*TripVenza Visitor Pass*%0A%0AHello ${visitor.name}, your visit to *${visitor.appointment_with || 'our office'}* has been approved.%0A%0A🕒 *Approved Time:* ${visitor.appointment_time}%0A🎫 *Access Link:* ${registrationUrl}%0A%0APlease keep this message ready to show at the reception.`;
+        // Use visit_date if available, otherwise fallback to creation date to ensure it's never "--"
+        const rawDate = visitor.visit_date || visitor.createdAt;
+        const datePart = rawDate ? new Date(rawDate).toLocaleDateString('en-GB').split('/').join('-') : '--';
+        const timePart = visitor.appointment_time || (visitor.visit_date ? new Date(visitor.visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--');
+
+        const message = `*TripVenza Visitor Pass*%0A%0AHello *${visitor.name}*, your visit request has been approved.%0A%0A🏢 *Office:* ${visitor.appointment_with || 'General'}%0A📅 *Meeting Date:* ${datePart}%0A🕒 *Approved Time:* ${timePart}%0A🎫 *Access Link:* ${registrationUrl}%0A%0APlease show this message at the reception.`;
         const phone = visitor.mobile.replace(/\D/g, ''); // Clean non-digits
         // Using wa.me for universal compatibility
         window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
@@ -194,18 +211,27 @@ const AdminDashboard = () => {
                         <img src="/logo.jpg" class="logo">
                         <div class="name">${visitor.name}</div>
                         <div class="company">${visitor.company || 'Private Visit'}</div>
+                        <div style="font-size: 10px; color: #64748b; font-weight: bold; text-transform: uppercase; margin-top: 10px;">
+                            Office: ${visitor.appointment_with || 'General'} | Purpose: ${visitor.purpose || 'Visit'}
+                        </div>
                         <div class="qr" id="qrcode"></div>
-                        <div class="time">APPROVED: ${visitor.appointment_time}</div>
+                        <div class="time">APPROVED: ${visitor.visit_date ? new Date(visitor.visit_date).toLocaleDateString('en-GB').split('/').join('-') + ' ' + (visitor.appointment_time || '') : visitor.appointment_time}</div>
                         <p style="font-size: 10px; color: #94a3b8; margin-top: 20px;">VALID AT RECEPTION ONLY</p>
                     </div>
                     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
                     <script>
+                        const qrData = {
+                            id: '${visitor._id}',
+                            name: '${visitor.name}',
+                            office: '${visitor.appointment_with || ''}',
+                            time: '${visitor.visit_date ? new Date(visitor.visit_date).toLocaleDateString('en-GB') + ' ' + (visitor.appointment_time || '') : visitor.appointment_time}'
+                        };
                         new QRCode(document.getElementById("qrcode"), {
-                            text: JSON.stringify({id: '${visitor._id}', name: '${visitor.name}'}),
+                            text: JSON.stringify(qrData),
                             width: 150,
                             height: 150
                         });
-                        setTimeout(() => { window.print(); window.close(); }, 500);
+                        setTimeout(() => { window.print(); window.close(); }, 800);
                     </script>
                 </body>
             </html>
@@ -213,11 +239,24 @@ const AdminDashboard = () => {
         printWindow.document.write(passHtml);
         printWindow.document.close();
     };
+    const isValidDate = (d) => d instanceof Date && !isNaN(d);
+
     const filteredVisitors = visitors.filter(v => {
         const matchesOffice = filterOffice === 'All' || v.appointment_with === filterOffice;
         const matchesSearch = (v.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
             v.mobile?.includes(searchTerm);
-        const matchesDate = !filterDate || (v.createdAt && new Date(v.createdAt).toISOString().split('T')[0] === filterDate);
+
+        // Robust date check
+        let matchesDate = !filterDate;
+        if (filterDate && v.createdAt) {
+            const d = new Date(v.createdAt);
+            if (isValidDate(d)) {
+                matchesDate = d.toISOString().split('T')[0] === filterDate;
+            } else {
+                matchesDate = false;
+            }
+        }
+
         return matchesOffice && matchesSearch && matchesDate;
     });
 
@@ -230,7 +269,9 @@ const AdminDashboard = () => {
 
     // Grouping Logic for Date/Month/Year Records
     const groupedVisitors = filteredVisitors.reduce((groups, visitor) => {
-        const date = visitor.createdAt ? new Date(visitor.createdAt) : new Date();
+        let date = visitor.createdAt ? new Date(visitor.createdAt) : new Date();
+        if (!isValidDate(date)) date = new Date(); // Fallback to now if invalid
+
         const day = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
         if (!groups[day]) groups[day] = [];
         groups[day].push(visitor);
@@ -334,6 +375,127 @@ const AdminDashboard = () => {
                 ))}
             </div>
 
+            {/* Analytics Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="premium-card p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden"
+                >
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-white tracking-tight">Visitation Volume</h3>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Last 7 Active Days</p>
+                        </div>
+                        <div className="p-3 bg-emerald-500/10 rounded-2xl">
+                            <TrendingUp className="w-5 h-5 text-emerald-400" />
+                        </div>
+                    </div>
+
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={Object.keys(groupedVisitors).slice(0, 7).reverse().map(date => ({
+                                name: date.split(' ')[0] + ' ' + date.split(' ')[1],
+                                count: groupedVisitors[date].length
+                            }))}>
+                                <defs>
+                                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                />
+                                <Tooltip
+                                    cursor={{ stroke: '#10b981', strokeWidth: 2 }}
+                                    contentStyle={{
+                                        backgroundColor: '#0f172a',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '16px',
+                                        fontSize: '12px',
+                                        boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+                                    }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="count"
+                                    stroke="#10b981"
+                                    strokeWidth={4}
+                                    fillOpacity={1}
+                                    fill="url(#colorCount)"
+                                    animationDuration={2000}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
+
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="premium-card p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden"
+                >
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-white tracking-tight">Office Traffic</h3>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Visitor distribution by company</p>
+                        </div>
+                        <div className="p-3 bg-indigo-500/10 rounded-2xl">
+                            <Building2 className="w-5 h-5 text-indigo-400" />
+                        </div>
+                    </div>
+
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                                { name: 'Ellora', count: filteredVisitors.filter(v => v.appointment_with?.includes('ELLORA')).length, color: '#6366f1' },
+                                { name: 'TripVenza', count: filteredVisitors.filter(v => v.appointment_with?.includes('TRIPVENZA')).length, color: '#10b981' }
+                            ]}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                                    contentStyle={{
+                                        backgroundColor: '#0f172a',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        borderRadius: '16px',
+                                        fontSize: '12px'
+                                    }}
+                                />
+                                <Bar dataKey="count" radius={[10, 10, 0, 0]} barSize={60}>
+                                    {[
+                                        { name: 'Ellora', count: 0, color: '#6366f1' },
+                                        { name: 'TripVenza', count: 0, color: '#10b981' }
+                                    ].map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
+            </div>
+
 
             <AnimatePresence>
                 {showQR && (
@@ -381,13 +543,15 @@ const AdminDashboard = () => {
                                                     }`}>{visitor.status}</span>
                                                 <h3 className="text-xl font-black text-white truncate">{visitor.name}</h3>
                                                 <p className="text-slate-500 text-xs font-bold truncate">{visitor.company || 'Private Visit'}</p>
+                                                {visitor.visit_date && (
+                                                    <div className="mt-3 flex items-center gap-2 text-[11px] text-white font-black bg-emerald-500/20 px-3 py-1.5 rounded-xl border border-emerald-500/20 w-fit group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                                                        <Calendar className="w-3.5 h-3.5" />
+                                                        <span>{new Date(visitor.visit_date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="space-y-3 mb-6 bg-white/5 p-4 rounded-2xl border border-white/5">
-                                            <div className="flex items-center gap-2 mb-3 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
-                                                <UserRound className="w-3.5 h-3.5 text-emerald-400" />
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-white">HOST: {visitor.meeting_person || 'Admin'}</p>
-                                            </div>
                                             <div className="flex flex-col gap-2 border-b border-white/5 pb-3 mb-2">
                                                 <a
                                                     href={`https://wa.me/${visitor.mobile?.replace(/\D/g, '')}`}
@@ -420,14 +584,18 @@ const AdminDashboard = () => {
                                         </div>
                                         {visitor.status === 'pending' && (
                                             <div className="flex gap-2">
-                                                <button onClick={() => handleAction(visitor._id, 'approved')} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20">Approve</button>
+                                                <button onClick={() => handleAction(visitor, 'approved')} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20">Approve</button>
                                                 <button onClick={() => handleAction(visitor._id, 'rejected')} className="flex-1 bg-rose-500 hover:bg-rose-400 text-white font-black py-3 rounded-xl transition-all">Reject</button>
                                             </div>
                                         )}
                                         {visitor.status === 'approved' && (
                                             <div className="space-y-2">
                                                 <div className="bg-emerald-500/10 text-emerald-400 p-2 rounded-lg text-center font-black text-[10px] uppercase tracking-widest border border-emerald-500/20 flex items-center justify-center gap-2">
-                                                    <Clock className="w-3 h-3" /> {visitor.appointment_time}
+                                                    <Clock className="w-3 h-3" />
+                                                    {visitor.visit_date ?
+                                                        `${new Date(visitor.visit_date).toLocaleDateString('en-GB').split('/').join('-')} ${visitor.appointment_time || '00:00:00'}` :
+                                                        visitor.appointment_time
+                                                    }
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button onClick={() => handlePrint(visitor)} className="flex-1 bg-white/10 hover:bg-white/20 text-white font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-[10px] uppercase">
@@ -478,11 +646,17 @@ const AdminDashboard = () => {
                                         <p className="text-emerald-500 font-black uppercase tracking-[0.3em] text-[10px] mb-2">Gate Identity Check</p>
                                         <h3 className="text-4xl font-black text-white mb-2 leading-none">{newVisitorAlert.name || 'Anonymous Visitor'}</h3>
                                         <p className="text-slate-400 font-bold flex items-center gap-2 mb-6"><Building2 className="w-4 h-4" /> {newVisitorAlert.company || "Private visit"}</p>
-                                        <div className="bg-emerald-500/10 text-emerald-400 px-6 py-2 rounded-2xl border border-emerald-500/20 font-black uppercase text-[10px] tracking-widest w-fit">Awaiting Clearance</div>
+                                        <div className="bg-emerald-500/10 text-emerald-400 px-6 py-2 rounded-2xl border border-emerald-500/20 font-black uppercase text-[10px] tracking-widest w-fit mb-4">Awaiting Clearance</div>
+                                        {newVisitorAlert.visit_date && (
+                                            <div className="flex items-center gap-2 text-white/60 font-bold bg-white/5 px-4 py-2 rounded-xl border border-white/5 w-fit">
+                                                <Calendar className="w-4 h-4 text-emerald-400" />
+                                                <span className="text-sm">Visit: {new Date(newVisitorAlert.visit_date).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex gap-4 w-full">
-                                    <button onClick={() => { stopRingtone(); handleAction(newVisitorAlert._id, 'approved'); }} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black py-6 rounded-3xl transition-all shadow-2xl shadow-emerald-500/40 text-xl uppercase">Grant Access</button>
+                                    <button onClick={() => { stopRingtone(); handleAction(newVisitorAlert, 'approved'); }} className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-black py-6 rounded-3xl transition-all shadow-2xl shadow-emerald-500/40 text-xl uppercase">Grant Access</button>
                                     <button onClick={stopRingtone} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black py-6 rounded-3xl transition-all border border-white/5 text-xl uppercase">Dismiss</button>
                                 </div>
                             </div>
@@ -496,7 +670,15 @@ const AdminDashboard = () => {
                     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
                         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-slate-900 border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
                             <h3 className="text-2xl font-black text-white mb-2 uppercase tracking-tight">Security Token</h3>
-                            <p className="text-slate-500 text-xs font-bold mb-8 uppercase tracking-widest">Select Access Time Window</p>
+                            {visitors.find(v => v._id === approvalId)?.visit_date && (
+                                <div className="bg-white/5 p-3 rounded-2xl mb-4 border border-white/5">
+                                    <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest leading-none mb-1">Visitor Requested:</p>
+                                    <p className="text-emerald-400 font-mono text-xs font-bold">
+                                        {new Date(visitors.find(v => v._id === approvalId).visit_date).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })} @ {new Date(visitors.find(v => v._id === approvalId).visit_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                </div>
+                            )}
+                            <p className="text-slate-500 text-xs font-bold mb-4 uppercase tracking-widest">Select Access Time Window</p>
                             <div className="relative text-white mb-8">
                                 <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
                                 <select value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} className="premium-input w-full p-4 pl-12 rounded-2xl text-white bg-slate-800 appearance-none font-bold">

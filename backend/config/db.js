@@ -2,13 +2,29 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/tripvenza_visitors', {
-            serverSelectionTimeoutMS: 5000 // 5 seconds timeout
+        const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/tripvenza_visitors';
+
+        // Event Listeners
+        mongoose.connection.on('connected', () => {
+            console.log('✅ Mongoose connected to DB');
         });
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
+
+        mongoose.connection.on('error', (err) => {
+            console.error('❌ Mongoose connection error:', err.message);
+        });
+
+        mongoose.connection.on('disconnected', () => {
+            console.log('⚠️ Mongoose disconnected');
+        });
+
+        const conn = await mongoose.connect(mongoURI, {
+            serverSelectionTimeoutMS: 5000
+        });
+
+        console.log(`🚀 MongoDB Connected: ${conn.connection.host}`);
         return true;
     } catch (error) {
-        console.error(`Error: ${error.message} - Starting in MOCK MODE`);
+        console.error(`🔴 Critical DB Error: ${error.message} - Starting in MOCK MODE`);
         return false;
     }
 };

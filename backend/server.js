@@ -25,8 +25,16 @@ const getLocalIp = () => {
     return 'localhost';
 };
 
-// Middleware
+const getFormattedDate = (date, fallback) => {
+    const rawDate = date || fallback;
+    if (!rawDate) return '--';
+    return new Date(rawDate).toLocaleDateString('en-GB').split('/').join('-');
+};
 app.use(cors());
+app.use((req, res, next) => {
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -80,43 +88,66 @@ let mockVisitors = loadMockVisitors();
 // Routes
 const isMongooseConnected = () => mongoose.connection.readyState === 1;
 
+app.get('/api/db-status', (req, res) => {
+    const states = {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting',
+        99: 'uninitialized',
+    };
+    const state = mongoose.connection.readyState;
+    res.json({
+        status: isMongooseConnected() ? 'healthy' : 'degraded',
+        connectionState: states[state] || 'unknown',
+        dbName: mongoose.connection.name || 'none',
+        timestamp: new Date()
+    });
+});
+
 app.post('/api/visitors', async (req, res) => {
     try {
-        const { name, mobile, company, email, purpose, meeting_person, appointment_with, photo } = req.body;
-        console.log('--- NEW REGISTRATION ---');
-        console.log('Name:', name);
-        console.log('Photo Present:', !!photo);
-        if (photo) {
-            console.log('Photo Length:', photo.length);
-            console.log('Photo Start:', photo.substring(0, 50) + '...');
-        } else {
-            console.log('Photo: MISSING/NULL');
-        }
+        const { name, mobile, company, email, purpose, meeting_person, appointment_with, photo, visit_date } = req.body;
+        console.log('--- NEW REGISTRATION ATTEMPT ---');
+        console.log(`Name: ${name}, Office: ${appointment_with}`);
+        console.log(`Photo Size: ${photo ? photo.length : 'NONE'}`);
 
         if (isMongooseConnected()) {
-            const visitor = new Visitor({ name, mobile, company, email, purpose, appointment_with, photo });
-            await visitor.save();
-            // Start email in background
-            sendRegistrationEmail(visitor).catch(err => console.error('BG Registration Email Error:', err));
-            console.log(`NEW REGISTRATION: ${name} visiting ${appointment_with}`);
-            return res.status(201).json({ message: 'Submitted', id: visitor._id });
+            const visitor = new Visitor({ name, mobile, company, email, purpose, appointment_with, photo, visit_date });
+            try {
+                await visitor.save();
+                console.log(`Saved to DB: ${visitor._id}`);
+
+                // Start email in background
+                sendRegistrationEmail(visitor).catch(err => console.error('BG Registration Email Error:', err));
+
+                return res.status(201).json({ message: 'Submitted', id: visitor._id });
+            } catch (saveError) {
+                console.error('Mongoose Save Error:', saveError);
+                // If validation error, return 400
+                if (saveError.name === 'ValidationError') {
+                    return res.status(400).json({ error: saveError.message });
+                }
+                throw saveError;
+            }
         } else {
             // Mock Mode
             const newVisitor = {
                 _id: `mock_${Date.now()}`,
-                name, mobile, company, email, purpose, appointment_with, photo,
+                name, mobile, company, email, purpose, appointment_with, photo, visit_date,
                 status: 'pending',
                 createdAt: new Date(),
                 checkInTime: new Date()
             };
             mockVisitors.unshift(newVisitor);
             saveMockVisitors(mockVisitors);
-            console.log('Mock Visitor Added:', newVisitor);
+            console.log('Mock Visitor Added:', newVisitor._id);
             // Start email in background
             sendRegistrationEmail(newVisitor).catch(err => console.error('BG Registration Email Error:', err));
             return res.status(201).json({ message: 'Submitted (Mock)', id: newVisitor._id });
         }
     } catch (error) {
+        console.error('General Server Error (POST /api/visitors):', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -130,8 +161,10 @@ async function sendRegistrationEmail(visitor) {
 Thank you for reaching out to ${officeName}. Your visitation request has been successfully received.
 
 Details of your request:
-- Purpose: ${visitor.purpose}
 - Office: ${officeName}
+- Purpose: ${visitor.purpose}
+- Proposed Date: ${getFormattedDate(visitor.visit_date, visitor.createdAt)}
+- Proposed Time: ${new Date(visitor.visit_date || visitor.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
 
 We are currently reviewing your request and will notify you as soon as your status is updated.
 
@@ -173,6 +206,7 @@ app.get('/api/visitors', async (req, res) => {
             res.json(mockVisitors);
         }
     } catch (error) {
+        console.error('General Server Error (GET /api/visitors):', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -300,7 +334,8 @@ async function sendEmailUpdate(visitor, status, appointment_time) {
 
 We are delighted to confirm your meeting with ${officeName}! We have officially reserved your slot and are excited to discuss your plans.
 
-🗓 Time: ${appointment_time}
+🗓 Date: ${getFormattedDate(visitor.visit_date, visitor.createdAt)}
+🕒 Time: ${appointment_time}
 
 We look forward to welcoming you. See you soon!
 
@@ -347,7 +382,10 @@ const startServer = async () => {
     try {
         await connectDB();
         const PORT = process.env.PORT || 5000;
-        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+            console.log(`✅ System local time: ${new Date().toLocaleString()}`);
+        });
     } catch (error) {
         console.error('Failed to start server:', error);
     }

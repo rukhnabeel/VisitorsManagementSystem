@@ -230,10 +230,15 @@ const ReceptionScanner = () => {
                                     <p className="text-[10px] text-emerald-500 uppercase font-black tracking-widest mb-1">Identity Verified</p>
                                     <p className="text-white font-black text-xl leading-none mb-1">{visitorData.name}</p>
                                     <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">{visitorData.company || 'Private Visit'}</p>
-                                    <div className="mt-2 flex items-center gap-2">
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
                                         <div className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[8px] text-emerald-400 font-bold uppercase">
                                             {visitorData.appointment_with}
                                         </div>
+                                        {visitorData.visit_date && (
+                                            <div className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[8px] text-slate-400 font-bold uppercase">
+                                                Visit: {new Date(visitorData.visit_date).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </motion.div>
