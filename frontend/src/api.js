@@ -1,9 +1,14 @@
 import axios from 'axios';
 
 // Get the backend API URL. 
-// If we're on localhost, use localhost. 
-// If we're on a network IP, use that same IP but port 5000.
+// Priority: environment variable > localhost > network IP
 const getBaseUrl = () => {
+    // Check if environment variable is set (for production)
+    if (import.meta.env.VITE_API_URL) {
+        return import.meta.env.VITE_API_URL;
+    }
+    
+    // For local development
     const { hostname } = window.location;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return 'http://localhost:5000';
