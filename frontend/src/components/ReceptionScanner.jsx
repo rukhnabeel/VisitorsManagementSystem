@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { QrReader } from 'react-qr-reader';
+import React, { useState, useEffect, useRef } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
 import api from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Scan, CheckCircle, XCircle, LogIn, LogOut, Loader, ArrowLeft } from 'lucide-react';
@@ -11,31 +11,57 @@ const ReceptionScanner = () => {
     const [message, setMessage] = useState('');
     const [visitorData, setVisitorData] = useState(null);
     const [isSecureContext, setIsSecureContext] = useState(true);
+    const scannerRef = useRef(null);
+    const qrCodeScannerRef = useRef(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (!window.isSecureContext && window.location.hostname !== 'localhost') {
             setIsSecureContext(false);
         }
     }, []);
 
-    const handleScan = async (result, error) => {
-        if (!!result && status === 'idle') {
+    useEffect(() => {
+        if (!isSecureContext || status !== 'idle') return;
+
+        const startScanner = async () => {
             try {
-                // Prevent multiple scans
+                const html5QrCode = new Html5Qrcode("qr-reader");
+                qrCodeScannerRef.current = html5QrCode;
+
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 }
+                    },
+                    onScanSuccess,
+                    onScanFailure
+                );
+            } catch (err) {
+                console.error("Scanner start error:", err);
+                const errMsg = err.name === 'NotAllowedError'
+                    ? "Camera permission denied. Please allow camera access in browser settings."
+                    : "Camera not found or busy. Please check connections.";
+                alert(errMsg);
+            }
+        };
+
+        startScanner();
+
+        return () => {
+            if (qrCodeScannerRef.current && qrCodeScannerRef.current.isScanning) {
+                qrCodeScannerRef.current.stop().catch(err => console.error("Stop error:", err));
+            }
+        };
+    }, [isSecureContext, status]);
+
+    const onScanSuccess = async (decodedText, decodedResult) => {
+        if (status === 'idle') {
+            try {
                 setStatus('processing');
-                const text = result?.text;
-                if (!text) return;
-
-                const data = JSON.parse(text);
+                const data = JSON.parse(decodedText);
                 if (!data.id) throw new Error("Invalid QR Code");
-
-                // Fetch current status to decide Check-in vs Check-out
-                // For now, we'll assume we are checking them IN if pending/approved, or OUT if checked-in?
-                // Or we can just have two buttons? 
-                // Let's make it smart: Get visitor -> If approved -> Check In. If Checked In -> Check Out.
-
                 checkVisitorStatus(data.id);
-
             } catch (err) {
                 console.error(err);
                 setStatus('error');
@@ -43,6 +69,10 @@ const ReceptionScanner = () => {
                 setTimeout(resetScanner, 3000);
             }
         }
+    };
+
+    const onScanFailure = (error) => {
+        // Ignore scan failures, they happen frequently
     };
 
     const checkVisitorStatus = async (id) => {
@@ -135,23 +165,7 @@ const ReceptionScanner = () => {
                                 </div>
                             ) : status === 'idle' && (
                                 <>
-                                    <QrReader
-                                        onResult={handleScan}
-                                        constraints={{
-                                            video: { facingMode: 'environment' }
-                                        }}
-                                        scanDelay={500}
-                                        onUserMediaError={(err) => {
-                                            console.error("Scanner Error:", err);
-                                            // Handle various camera errors specifically
-                                            const errMsg = err.name === 'NotAllowedError'
-                                                ? "Camera permission denied. Please allow camera access in browser settings."
-                                                : "Camera not found or busy. Please check connections.";
-                                            alert(errMsg);
-                                        }}
-                                        containerStyle={{ width: '100%', height: '100%' }}
-                                        videoStyle={{ objectFit: 'cover' }}
-                                    />
+                                    <div id="qr-reader" style={{ width: '100%', height: '100%' }}></div>
                                     <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-emerald-500/30">
                                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                                         <span className="text-[10px] text-emerald-400 font-black tracking-widest uppercase">Live Scanning</span>
