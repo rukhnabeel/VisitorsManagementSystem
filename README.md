@@ -40,6 +40,6 @@ A premium MERN stack visitor management system for TripVenza Holidays.
 - **Frontend**: Deploy to Vercel/Netlify.
 - **Backend**: Deploy to Render/Railway.
 - **Database**: Use MongoDB Atlas.
-
+YES
 ---
 Built with ❤️ for TripVenza Holidays.
