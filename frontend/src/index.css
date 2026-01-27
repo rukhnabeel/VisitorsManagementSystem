@@ -45,3 +45,147 @@ body {
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
   outline: none;
 }
+
+/* Futuristic Background & Effects */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.scanline::after {
+  content: "";
+  position: absolute;
+  top: -100%;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background: linear-gradient(to bottom, transparent, rgba(16, 185, 129, 0.15), transparent);
+  animation: scan 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scan {
+  0% {
+    top: -100%;
+  }
+
+  100% {
+    top: 100%;
+  }
+}
+
+.glow-orb {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  filter: blur(100px);
+  opacity: 0.15;
+  border-radius: 50%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes float-orb {
+
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(100px, 50px);
+  }
+
+  50% {
+    transform: translate(50px, 150px);
+  }
+
+  75% {
+    transform: translate(-50px, 100px);
+  }
+}
+
+.pulse-active {
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulse-ring 1.5s cubic-bezier(0.66, 0, 0, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Safe Colors for Export (Prevents oklch errors in html2canvas) */
+#visitor-pass-card {
+  background-color: #020617 !important;
+}
+
+#visitor-pass-card .text-emerald-400 {
+  color: #34d399 !important;
+  /* Hex fallback for emerald-400 */
+}
+
+#visitor-pass-card .bg-emerald-500\/20 {
+  background-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+#visitor-pass-card .text-white {
+  color: #ffffff !important;
+}
+
+#visitor-pass-card .text-slate-500 {
+  color: #64748b !important;
+}
+
+#visitor-pass-card .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+#visitor-pass-card .border-white\/10 {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
