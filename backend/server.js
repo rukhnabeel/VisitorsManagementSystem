@@ -41,6 +41,10 @@ app.get('/', (req, res) => {
     res.json({ status: 'active', message: 'Backend is running' });
 });
 
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', message: 'Express Health Check Passed' });
+});
+
 app.use((req, res, next) => {
     console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
     next();
