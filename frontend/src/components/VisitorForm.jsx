@@ -87,11 +87,12 @@ const VisitorForm = () => {
             let detailedError = '';
             if (!err.response) {
                 // Network error (server down, CORS, etc.)
-                detailedError = `Network Error (Server Unreachable). Check if Backend is running at ${api.defaults.baseURL}`;
+                // Network error (server down, CORS, etc.)
+                detailedError = `Network/Server Error. target: ${api.defaults.baseURL}`;
             } else if (err.response.status === 413) {
                 detailedError = "Photo size too large. Please try again.";
             } else {
-                detailedError = err.response.data?.error || `Error ${err.response.status}: ${err.statusText || 'Submission failed'}`;
+                detailedError = err.response.data?.error || `Error ${err.response.status}: ${err.response.statusText || 'Submission failed'} (Target: ${api.defaults.baseURL})`;
             }
 
             setErrorMessage(detailedError);
