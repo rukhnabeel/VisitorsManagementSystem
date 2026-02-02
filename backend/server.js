@@ -30,7 +30,17 @@ const getFormattedDate = (date, fallback) => {
     if (!rawDate) return '--';
     return new Date(rawDate).toLocaleDateString('en-GB').split('/').join('-');
 };
-app.use(cors());
+app.use(cors({
+    origin: '*', // Allow all origins (since frontend might be on different Vercel domain)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Basic health check to verify server is running
+app.get('/', (req, res) => {
+    res.json({ status: 'active', message: 'Backend is running' });
+});
+
 app.use((req, res, next) => {
     console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
     next();
