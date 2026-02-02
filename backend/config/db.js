@@ -2,7 +2,11 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/tripvenza_visitors';
+        const mongoURI = process.env.MONGO_URI ||
+            process.env.MONGO_URL ||
+            process.env.MONGODB_URI ||
+            process.env.STORAGE_URL ||
+            'mongodb://localhost:27017/tripvenza_visitors';
 
         // Event Listeners
         mongoose.connection.on('connected', () => {
